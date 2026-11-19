@@ -5,7 +5,7 @@ import base64
 
 st.set_page_config(page_title="YouTube Explainer & Shorts Maker", layout="wide")
 st.title("🎬 YouTube Explainer & Shorts Maker")
-st.caption("Raw spoken scripts + professional voiceover + assets")
+st.caption("Raw spoken scripts + professional voiceover + assets + brand banners")
 
 # Sidebar keys
 with st.sidebar:
@@ -18,7 +18,7 @@ with st.sidebar:
 col1, col2, col3 = st.columns(3)
 with col1:
     topic = st.text_input("Video topic / angle", placeholder="e.g. release window rumors, map size, online features")
-    brand_name = st.text_input("Brand / Channel name", placeholder="SuperHelper")
+    brand_name = st.text_input("Brand / Channel name", placeholder="Vice Grift AI")
 with col2:
     video_style = st.radio("Video style", ["Visual / Animated style", "Text-only"])
     video_type = st.selectbox("Length type", ["Short (15–60 sec)", "Explainer"])
@@ -62,6 +62,60 @@ thumbnail_styles = [
     "Urban Cinematic Action (bold colors, dramatic lighting, high contrast)"
 ]
 selected_thumb_style = st.selectbox("Choose thumbnail style", thumbnail_styles)
+
+# ========== NEW: Brand Banner Generator ==========
+st.subheader("Brand Banner Generator (1500 × 500)")
+st.caption("Wide banners for X (Twitter) and YouTube channel headers")
+
+banner_style = st.selectbox(
+    "Banner style",
+    [
+        "Urban Cinematic Night (neon, rain, luxury)",
+        "Bold & High Contrast",
+        "Minimalist Dark",
+        "Neon Cyberpunk City",
+        "Luxury & Wealth",
+        "Street Hustle Energy"
+    ]
+)
+
+if st.button("🖼️ Generate Brand Banner (1500×500 style)"):
+    if not openai_key or not brand_name:
+        st.warning("OpenAI key and Brand Name are required.")
+    else:
+        client = OpenAI(api_key=openai_key)
+        with st.spinner("Generating wide brand banner..."):
+            banner_prompt = f"""
+Wide cinematic banner, 3:1 aspect ratio, perfect for X/Twitter and YouTube channel header.
+Brand: {brand_name}
+Theme: {banner_style}
+Include the brand name "{brand_name}" in bold, stylish, high-impact text.
+Urban open-world lifestyle energy, dramatic lighting, high quality, photorealistic.
+No other text. Clean composition with space for the brand name.
+"""
+            try:
+                # Closest available size to 1500×500 is 1792×1024 (landscape)
+                img = client.images.generate(
+                    model="gpt-image-2.5-flare",
+                    prompt=banner_prompt,
+                    size="1792x1024",
+                    n=1
+                )
+                img_bytes = base64.b64decode(img.data[0].b64_json)
+                st.session_state.banner = img_bytes
+                st.success("Banner generated! (1792×1024 — closest to 1500×500)")
+            except Exception as e:
+                st.error(f"Banner generation failed: {e}")
+
+if "banner" in st.session_state and st.session_state.banner:
+    st.image(st.session_state.banner, caption=f"{brand_name} — Brand Banner", use_container_width=True)
+    st.download_button(
+        "Download Banner (PNG)",
+        st.session_state.banner,
+        file_name=f"{brand_name.replace(' ', '_')}_banner.png",
+        mime="image/png"
+    )
+    st.info("Tip: Crop or resize to exact 1500×500 in Canva or Photoshop if needed. The generated image is already wide-format.")
 
 # Voice options
 st.subheader("Voiceover Style")
@@ -129,6 +183,8 @@ if "thumbnails" not in st.session_state:
     st.session_state.thumbnails = []
 if "voiceover" not in st.session_state:
     st.session_state.voiceover = None
+if "banner" not in st.session_state:
+    st.session_state.banner = None
 
 def generate_script(client):
     research = ""
