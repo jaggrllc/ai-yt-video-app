@@ -5,7 +5,7 @@ import base64
 
 st.set_page_config(page_title="YouTube Explainer & Shorts Maker", layout="wide")
 st.title("🎬 YouTube Explainer & Shorts Maker")
-st.caption("One-click generation of script, voiceover, scene images & thumbnails")
+st.caption("Raw spoken scripts + voiceover + assets (GTA VI research mode)")
 
 # Sidebar keys
 with st.sidebar:
@@ -17,7 +17,7 @@ with st.sidebar:
 # Main controls
 col1, col2, col3 = st.columns(3)
 with col1:
-    topic = st.text_input("Video topic", placeholder="How our app saves you 2 hours a day")
+    topic = st.text_input("Video topic / angle", placeholder="e.g. release window rumors, map size, online features")
     brand_name = st.text_input("Brand / Channel name", placeholder="SuperHelper")
 with col2:
     video_style = st.radio("Video style", ["Visual / Animated style", "Text-only"])
@@ -27,13 +27,13 @@ with col3:
         duration = st.slider("Target duration (seconds)", 15, 60, 45)
     else:
         duration = st.slider("Target duration (seconds)", 60, 300, 90)
-    tone = st.selectbox("Tone", ["Friendly & clear", "Energetic", "Professional", "Fun & playful"])
+    tone = st.selectbox("Tone", ["Casual homie conversation", "Energetic", "Confident & chill", "Hype but natural"])
 
 # Key Information
 st.subheader("Key Information to Talk About")
 key_points = st.text_area(
-    "Add specific points, facts, features, or messages you want in the video (optional)",
-    placeholder="Example:\n- Our app has a 30-day free trial\n- Saves an average of 2 hours per day\n- Used by over 50,000 users",
+    "Add specific points, facts, or angles you want in the video (optional)",
+    placeholder="Example:\n- Latest map size estimates\n- Online mode changes\n- Expected release window",
     height=140
 )
 
@@ -108,54 +108,58 @@ def generate_script(client):
     research = ""
     if serpapi_key:
         try:
-            search = GoogleSearch({
-                "q": f"{topic} explainer OR how to OR tips",
-                "api_key": serpapi_key,
-                "num": 5
-            })
-            results = search.get_dict()
-            for r in results.get("organic_results", [])[:5]:
-                research += f"- {r.get('title', '')}: {r.get('snippet', '')}\n"
+            # Targeted research on GTA VI high-volume & breakout terms
+            search_queries = [
+                "Grand Theft Auto VI release date",
+                "GTA 6 map size",
+                "GTA 6 online features",
+                "Grand Theft Auto 6 trailer breakdown",
+                "GTA 6 vs GTA 5 differences",
+                "Grand Theft Auto VI news"
+            ]
+            for q in search_queries[:4]:
+                search = GoogleSearch({
+                    "q": q,
+                    "api_key": serpapi_key,
+                    "num": 5
+                })
+                results = search.get_dict()
+                research += f"\n=== {q} ===\n"
+                for r in results.get("organic_results", [])[:4]:
+                    research += f"- {r.get('title', '')}: {r.get('snippet', '')}\n"
         except Exception:
             research = "Research skipped."
 
     word_count = int(duration * 2.5)
-    structure = ("Hook (first 3–5 sec) → One clear idea → Quick payoff → CTA" 
-                 if duration <= 60 else 
-                 "Hook → Problem → Solution → How it works / benefits → CTA")
 
-    visual_instruction = (
-        f"For each major scene, give clear visual suggestions optimized for {format_note}."
-        if "Visual" in video_style else
-        f"Focus on strong on-screen text suitable for {format_note}."
-    )
-
-    key_points_section = f"\nIMPORTANT – Must include these key points in the script:\n{key_points}\n" if key_points.strip() else ""
+    key_points_section = f"\nMust naturally cover these points:\n{key_points}\n" if key_points.strip() else ""
 
     prompt = f"""
-You are a YouTube scriptwriter for "{brand_name}".
-Topic: {topic}
-Style: {video_style}
-Format: {aspect_ratio}
-Target length: {duration} seconds (~{word_count} words)
+You are writing a raw spoken YouTube script that will be read out loud by an AI voice.
+The topic is secretly about the upcoming big open-world crime game (the one everyone is waiting for), but you must NEVER say the words "GTA", "Grand Theft Auto", "GTA 6", "GTA VI", or any direct title.
+
+Style: Casual conversation with a close confident homie. Speak as if you're catching up with a friend who already knows what you're talking about. Use subtle hints only.
+
+Target length: about {word_count} words ({duration} seconds).
 Tone: {tone}
-Structure: {structure}
 
-Research:
+Research data (use the facts, never name the game):
 {research}
-{key_points_section}
-Write a natural, easy-to-speak script that incorporates the key points above naturally.
-Also include:
-- 5 title options
-- YouTube description + hashtags
-- Scene-by-scene breakdown
 
-{visual_instruction}
+{key_points_section}
+
+Rules:
+- Output ONLY the pure spoken script. No titles, no scene directions, no timestamps, no "hook:", no director notes.
+- Never mention the game name or abbreviation.
+- Make it sound natural when spoken.
+- Base the content on the strongest current search topics from the research.
+- Keep it evergreen and well-written.
 """
+
     response = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[{"role": "user", "content": prompt}],
-        temperature=0.8
+        temperature=0.75
     )
     return response.choices[0].message.content
 
@@ -164,13 +168,13 @@ def generate_title_overlays(client):
         model="gpt-4o-mini",
         messages=[{
             "role": "user",
-            "content": f"""Based on this topic and script, create 6 short, punchy title text overlays for a YouTube thumbnail.
-Make them 3–7 words, high impact, easy to read.
+            "content": f"""Create 6 short, punchy title text overlays (3–7 words) for a YouTube thumbnail.
+Do NOT use the words GTA or Grand Theft Auto.
+Make them curiosity-driven and related to the upcoming big open-world game.
 Return as a numbered list only.
 
-Topic: {topic}
-Key points: {key_points[:500] if key_points else 'None'}
-Script excerpt: {st.session_state.script_output[:1200]}"""
+Topic angle: {topic}
+Key points: {key_points[:400] if key_points else 'None'}"""
         }],
         temperature=0.7
     )
@@ -182,7 +186,7 @@ def generate_scene_images(client):
         model="gpt-4o-mini",
         messages=[{
             "role": "user",
-            "content": f"Create exactly 3 short image prompts for the main scenes of this video. Optimize for {format_note}. Return as numbered list.\n\n{st.session_state.script_output[:2500]}"
+            "content": f"Create exactly 3 short image prompts for the main visual scenes. Do not mention any game name. Optimize for {format_note}. Return as numbered list.\n\nScript:\n{st.session_state.script_output[:2000]}"
         }]
     )
     scene_prompts = [line.strip() for line in prompt_resp.choices[0].message.content.split("\n") 
@@ -193,7 +197,7 @@ def generate_scene_images(client):
         try:
             img = client.images.generate(
                 model="gpt-image-2.5-flare",
-                prompt=f"YouTube video scene, clean modern style, {format_note}: {sp}",
+                prompt=f"Cinematic urban open-world game style scene, modern, high quality, {format_note}: {sp}",
                 size=image_size,
                 n=1
             )
@@ -209,10 +213,10 @@ def generate_thumbnails(client):
         messages=[{
             "role": "user",
             "content": f"""Create 2 strong YouTube thumbnail prompts in the style: "{selected_thumb_style}".
-Optimize for {format_note}. Bold, high-contrast, clear text space.
+Do not mention any game name. Optimize for {format_note}. Bold, high-contrast, clear text space.
 Return as numbered list.
 
-Topic: {topic}"""
+Angle: {topic}"""
         }]
     )
     thumb_prompts = [line.strip() for line in thumb_resp.choices[0].message.content.split("\n") 
@@ -223,7 +227,7 @@ Topic: {topic}"""
         try:
             img = client.images.generate(
                 model="gpt-image-2.5-flare",
-                prompt=f"YouTube thumbnail, {selected_thumb_style}, bold high-contrast, large text space, {format_note}: {tp}",
+                prompt=f"YouTube thumbnail, {selected_thumb_style}, bold high-contrast, large text space, cinematic urban style, {format_note}: {tp}",
                 size=thumbnail_size,
                 n=1
             )
@@ -241,7 +245,7 @@ with col_btn1:
             st.warning("OpenAI key and topic required.")
         else:
             client = OpenAI(api_key=openai_key)
-            with st.spinner("Writing script..."):
+            with st.spinner("Researching and writing raw script..."):
                 st.session_state.script_output = generate_script(client)
             st.rerun()
 
@@ -251,12 +255,12 @@ with col_btn2:
             st.warning("OpenAI key and topic required.")
         else:
             client = OpenAI(api_key=openai_key)
-            with st.spinner("Generating ALL assets (script, voiceover, scenes, thumbnails)..."):
+            with st.spinner("Generating ALL assets..."):
                 st.session_state.script_output = generate_script(client)
                 st.session_state.title_suggestions = generate_title_overlays(client)
 
                 if voice_option in ["AI Male", "AI Female"] and selected_voice:
-                    plain = st.session_state.script_output.split("5 title")[0] if "5 title" in st.session_state.script_output else st.session_state.script_output
+                    plain = st.session_state.script_output
                     try:
                         speech = client.audio.speech.create(
                             model="tts-1",
@@ -274,8 +278,9 @@ with col_btn2:
 
 # Display results
 if st.session_state.script_output:
-    st.success(f"All assets ready! (Format: {aspect_ratio})")
-    st.markdown(st.session_state.script_output)
+    st.success(f"Raw script ready! (Format: {aspect_ratio})")
+    st.markdown("**Spoken Script (ready for AI voice):**")
+    st.text_area("Script", st.session_state.script_output, height=300)
 
     if st.session_state.title_suggestions:
         st.subheader("Title Text Overlay Suggestions")
@@ -306,7 +311,7 @@ if st.session_state.script_output:
                     st.image(img_bytes, caption=f"Thumbnail {idx+1}", use_container_width=True)
                     st.download_button(f"Download Thumb {idx+1}", img_bytes, f"thumbnail_{idx+1}.png", "image/png", key=f"th{idx}")
 
-    st.download_button("Download Full Script", st.session_state.script_output, file_name="script.txt")
+    st.download_button("Download Raw Script", st.session_state.script_output, file_name="script.txt")
 
     st.info(f"""
 **Finish the video ({aspect_ratio}):**
@@ -315,3 +320,4 @@ if st.session_state.script_output:
 3. Add scene images + voiceover + text + logo.
 4. Export and upload.
 """)
+Replace your current `app.py` with this version and restart Streamlit.
