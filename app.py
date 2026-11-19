@@ -42,7 +42,7 @@ image_size = "1024x1792" if is_vertical else "1792x1024"
 thumbnail_size = image_size
 format_note = "vertical 9:16 Shorts" if is_vertical else "horizontal 16:9 explainer"
 
-# Thumbnail styles
+# Thumbnail styles (updated)
 st.subheader("Thumbnail Style")
 thumbnail_styles = [
     "Bold & Dramatic (high contrast, intense)",
@@ -50,7 +50,8 @@ thumbnail_styles = [
     "Colorful & Energetic",
     "Professional & Trustworthy",
     "Curiosity-driven (mystery / question)",
-    "Fun & Playful"
+    "Fun & Playful",
+    "Urban Cinematic Action (bold colors, dramatic lighting, high contrast)"
 ]
 selected_thumb_style = st.selectbox("Choose thumbnail style", thumbnail_styles)
 
@@ -158,10 +159,10 @@ Script excerpt: {st.session_state.script_output[:1200]}"""
     text = resp.choices[0].message.content
     return [line.strip() for line in text.split("\n") if line.strip() and any(c.isdigit() for c in line[:3])][:6]
 
-# ========== ONE-CLICK GENERATE ALL ==========
+# Buttons
 col_btn1, col_btn2 = st.columns(2)
 with col_btn1:
-    if st.button("✨ Generate Script Only", type="secondary"):
+    if st.button("✨ Generate Script Only"):
         if not openai_key or not topic:
             st.warning("OpenAI key and topic required.")
         else:
@@ -176,14 +177,10 @@ with col_btn2:
             st.warning("OpenAI key and topic required.")
         else:
             client = OpenAI(api_key=openai_key)
-            with st.spinner("Generating everything (script, voiceover, images, thumbnails)..."):
-                # 1. Script
+            with st.spinner("Generating script + title overlays + voiceover..."):
                 st.session_state.script_output = generate_script(client)
-
-                # 2. Title overlays
                 st.session_state.title_suggestions = generate_title_overlays(client)
 
-                # 3. Voiceover
                 if voice_option in ["AI Male", "AI Female"] and selected_voice:
                     plain = st.session_state.script_output.split("5 title")[0] if "5 title" in st.session_state.script_output else st.session_state.script_output
                     try:
@@ -195,8 +192,6 @@ with col_btn2:
                         st.session_state.voiceover = speech.content
                     except Exception:
                         st.session_state.voiceover = None
-
-                # 4. Scene images + Thumbnails will be generated below after rerun
             st.rerun()
 
 # Display results
@@ -206,7 +201,7 @@ if st.session_state.script_output:
 
     plain_script = st.session_state.script_output.split("5 title")[0] if "5 title" in st.session_state.script_output else st.session_state.script_output
 
-    # Title Text Overlay Suggestions
+    # Title overlays
     st.subheader("Title Text Overlay Suggestions")
     if not st.session_state.title_suggestions and openai_key:
         if st.button("Generate Title Overlay Ideas"):
@@ -217,7 +212,6 @@ if st.session_state.script_output:
     if st.session_state.title_suggestions:
         for i, title in enumerate(st.session_state.title_suggestions, 1):
             st.write(f"**{i}.** {title}")
-        st.caption("Copy these onto your thumbnail in CapCut / Canva / Photoshop.")
 
     # Voiceover
     if voice_option in ["AI Male", "AI Female"] and selected_voice and openai_key:
@@ -242,20 +236,43 @@ if st.session_state.script_output:
     # Scene Images
     st.subheader("AI-Generated Scene Images")
     if st.button("🎨 Generate Scene Images"):
-        client = OpenAI(api_key=openai_key)
-        with st.spinner("Generating scene images..."):
-            # (same logic as before – abbreviated here for space, keep your previous scene generation code)
-            st.info("Scene images generation runs here (use the same code block from the previous version).")
+        if openai_key:
+            client = OpenAI(api_key=openai_key)
+            with st.spinner("Generating scene images..."):
+                prompt_resp = client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=[{
+                        "role": "user",
+                        "content": f"Create exactly 3 short image prompts for the main scenes of this video. Optimize for {format_note}. Return as numbered list.\n\n{st.session_state.script_output[:2500]}"
+                    }]
+                )
+                scene_prompts = [line.strip() for line in prompt_resp.choices[0].message.content.split("\n") 
+                                 if line.strip() and any(c.isdigit() for c in line[:3])][:3]
 
-    # Multiple Thumbnail Styles
+                cols = st.columns(3)
+                for idx, sp in enumerate(scene_prompts):
+                    try:
+                        img = client.images.generate(
+                            model="gpt-image-2.5-flare",
+                            prompt=f"YouTube video scene, clean modern style, {format_note}: {sp}",
+                            size=image_size,
+                            n=1
+                        )
+                        img_bytes = base64.b64decode(img.data[0].b64_json)
+                        with cols[idx]:
+                            st.image(img_bytes, caption=f"Scene {idx+1}", use_container_width=True)
+                            st.download_button(f"Download Scene {idx+1}", img_bytes, f"scene_{idx+1}.png", "image/png", key=f"s{idx}")
+                    except Exception:
+                        with cols[idx]:
+                            st.error(f"Scene {idx+1} failed")
+
+    # Thumbnails
     st.subheader("Thumbnail Generator")
     st.caption(f"Style: {selected_thumb_style} · Format: {aspect_ratio}")
-    if st.button("🖼️ Generate Thumbnails (Selected Style)"):
-        if not openai_key:
-            st.warning("OpenAI key required.")
-        else:
+    if st.button("🖼️ Generate Thumbnails"):
+        if openai_key:
             client = OpenAI(api_key=openai_key)
-            with st.spinner(f"Generating thumbnails in '{selected_thumb_style}' style..."):
+            with st.spinner(f"Generating thumbnails ({selected_thumb_style})..."):
                 thumb_resp = client.chat.completions.create(
                     model="gpt-4o-mini",
                     messages=[{
@@ -264,31 +281,25 @@ if st.session_state.script_output:
 Optimize for {format_note}. Bold, high-contrast, clear text space.
 Return as numbered list.
 
-Topic: {topic}
-Script: {st.session_state.script_output[:1000]}"""
-                    }],
-                    temperature=0.8
+Topic: {topic}"""
+                    }]
                 )
                 thumb_prompts = [line.strip() for line in thumb_resp.choices[0].message.content.split("\n") 
                                  if line.strip() and any(c.isdigit() for c in line[:3])][:2]
 
-                if not thumb_prompts:
-                    thumb_prompts = [f"{selected_thumb_style} thumbnail for {topic}"]
-
                 cols = st.columns(2)
-                for idx, t_prompt in enumerate(thumb_prompts):
+                for idx, tp in enumerate(thumb_prompts):
                     try:
-                        img_response = client.images.generate(
+                        img = client.images.generate(
                             model="gpt-image-2.5-flare",
-                            prompt=f"YouTube thumbnail, {selected_thumb_style}, bold high-contrast, large text space, {format_note}: {t_prompt}",
+                            prompt=f"YouTube thumbnail, {selected_thumb_style}, bold high-contrast, large text space, {format_note}: {tp}",
                             size=thumbnail_size,
                             n=1
                         )
-                        img_bytes = base64.b64decode(img_response.data[0].b64_json)
+                        img_bytes = base64.b64decode(img.data[0].b64_json)
                         with cols[idx]:
                             st.image(img_bytes, caption=f"Thumbnail {idx+1}", use_container_width=True)
-                            st.download_button(f"Download Thumb {idx+1}", img_bytes,
-                                               file_name=f"thumbnail_{idx+1}.png", mime="image/png", key=f"t{idx}")
+                            st.download_button(f"Download Thumb {idx+1}", img_bytes, f"thumbnail_{idx+1}.png", "image/png", key=f"th{idx}")
                     except Exception:
                         with cols[idx]:
                             st.error(f"Thumbnail {idx+1} failed")
