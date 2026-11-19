@@ -313,4 +313,4 @@ if st.session_state.script_output:
 2. Set CapCut/Canva project to **{aspect_ratio}**.
 3. Add scene images + voiceover + text + logo.
 4. Export and upload.
-""")nt `app.py` with this version and restart Streamlit. One click now builds the full package.
+""")
