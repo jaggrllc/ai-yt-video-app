@@ -1,0 +1,6 @@
+openai
+serpai
+streamlit
+requests
+gtts
+moviepy
