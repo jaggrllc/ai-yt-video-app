@@ -29,14 +29,6 @@ with col3:
         duration = st.slider("Target duration (seconds)", 60, 300, 90)
     tone = st.selectbox("Tone", ["Friendly & clear", "Energetic", "Professional", "Fun & playful"])
 
-# ========== NEW: Bot Name / Wake-Up Word ==========
-st.subheader("Bot Name / Wake-Up Word")
-bot_name = st.text_input(
-    "WAKE UP WORD / NAME OF THE BOT",
-    placeholder="e.g. Alex, Nova, HelperBot, or just leave blank",
-    help="The script will be written as if this named bot is speaking."
-)
-
 # Key Information
 st.subheader("Key Information to Talk About")
 key_points = st.text_area(
@@ -140,14 +132,6 @@ def generate_script(client):
 
     key_points_section = f"\nIMPORTANT – Must include these key points in the script:\n{key_points}\n" if key_points.strip() else ""
 
-    bot_instruction = ""
-    if bot_name.strip():
-        bot_instruction = f"""
-The video is presented by a bot named "{bot_name}".
-Write the script in first person as if {bot_name} is speaking directly to the viewer.
-Start with a natural introduction that includes the name if it fits, and keep the personality consistent.
-"""
-
     prompt = f"""
 You are a YouTube scriptwriter for "{brand_name}".
 Topic: {topic}
@@ -156,7 +140,6 @@ Format: {aspect_ratio}
 Target length: {duration} seconds (~{word_count} words)
 Tone: {tone}
 Structure: {structure}
-{bot_instruction}
 
 Research:
 {research}
@@ -186,7 +169,6 @@ Make them 3–7 words, high impact, easy to read.
 Return as a numbered list only.
 
 Topic: {topic}
-Bot name: {bot_name if bot_name else 'None'}
 Key points: {key_points[:500] if key_points else 'None'}
 Script excerpt: {st.session_state.script_output[:1200]}"""
         }],
@@ -293,8 +275,6 @@ with col_btn2:
 # Display results
 if st.session_state.script_output:
     st.success(f"All assets ready! (Format: {aspect_ratio})")
-    if bot_name.strip():
-        st.info(f"Script written as presented by **{bot_name}**")
     st.markdown(st.session_state.script_output)
 
     if st.session_state.title_suggestions:
