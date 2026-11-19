@@ -1,6 +1,4 @@
-openai
-serpai
 streamlit
+openai
+google-search-results
 requests
-gtts
-moviepy
