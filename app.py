@@ -320,4 +320,3 @@ if st.session_state.script_output:
 3. Add scene images + voiceover + text + logo.
 4. Export and upload.
 """)
-Replace your current `app.py` with this version and restart Streamlit.
