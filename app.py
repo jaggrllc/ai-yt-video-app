@@ -29,6 +29,22 @@ with col3:
         duration = st.slider("Target duration (seconds)", 60, 300, 90)
     tone = st.selectbox("Tone", ["Friendly & clear", "Energetic", "Professional", "Fun & playful"])
 
+# ========== NEW: Bot Name / Wake-Up Word ==========
+st.subheader("Bot Name / Wake-Up Word")
+bot_name = st.text_input(
+    "WAKE UP WORD / NAME OF THE BOT",
+    placeholder="e.g. Alex, Nova, HelperBot, or just leave blank",
+    help="The script will be written as if this named bot is speaking."
+)
+
+# Key Information
+st.subheader("Key Information to Talk About")
+key_points = st.text_area(
+    "Add specific points, facts, features, or messages you want in the video (optional)",
+    placeholder="Example:\n- Our app has a 30-day free trial\n- Saves an average of 2 hours per day\n- Used by over 50,000 users",
+    height=140
+)
+
 # Aspect Ratio
 st.subheader("Video Dimensions")
 aspect_ratio = st.radio(
@@ -122,6 +138,16 @@ def generate_script(client):
         f"Focus on strong on-screen text suitable for {format_note}."
     )
 
+    key_points_section = f"\nIMPORTANT – Must include these key points in the script:\n{key_points}\n" if key_points.strip() else ""
+
+    bot_instruction = ""
+    if bot_name.strip():
+        bot_instruction = f"""
+The video is presented by a bot named "{bot_name}".
+Write the script in first person as if {bot_name} is speaking directly to the viewer.
+Start with a natural introduction that includes the name if it fits, and keep the personality consistent.
+"""
+
     prompt = f"""
 You are a YouTube scriptwriter for "{brand_name}".
 Topic: {topic}
@@ -130,11 +156,13 @@ Format: {aspect_ratio}
 Target length: {duration} seconds (~{word_count} words)
 Tone: {tone}
 Structure: {structure}
+{bot_instruction}
 
 Research:
 {research}
-
-Write a natural script + 
+{key_points_section}
+Write a natural, easy-to-speak script that incorporates the key points above naturally.
+Also include:
 - 5 title options
 - YouTube description + hashtags
 - Scene-by-scene breakdown
@@ -158,6 +186,8 @@ Make them 3–7 words, high impact, easy to read.
 Return as a numbered list only.
 
 Topic: {topic}
+Bot name: {bot_name if bot_name else 'None'}
+Key points: {key_points[:500] if key_points else 'None'}
 Script excerpt: {st.session_state.script_output[:1200]}"""
         }],
         temperature=0.7
@@ -240,13 +270,9 @@ with col_btn2:
         else:
             client = OpenAI(api_key=openai_key)
             with st.spinner("Generating ALL assets (script, voiceover, scenes, thumbnails)..."):
-                # 1. Script
                 st.session_state.script_output = generate_script(client)
-
-                # 2. Title overlays
                 st.session_state.title_suggestions = generate_title_overlays(client)
 
-                # 3. Voiceover
                 if voice_option in ["AI Male", "AI Female"] and selected_voice:
                     plain = st.session_state.script_output.split("5 title")[0] if "5 title" in st.session_state.script_output else st.session_state.script_output
                     try:
@@ -259,10 +285,7 @@ with col_btn2:
                     except Exception:
                         st.session_state.voiceover = None
 
-                # 4. Scene images
                 st.session_state.scene_images = generate_scene_images(client)
-
-                # 5. Thumbnails
                 st.session_state.thumbnails = generate_thumbnails(client)
 
             st.rerun()
@@ -270,22 +293,21 @@ with col_btn2:
 # Display results
 if st.session_state.script_output:
     st.success(f"All assets ready! (Format: {aspect_ratio})")
+    if bot_name.strip():
+        st.info(f"Script written as presented by **{bot_name}**")
     st.markdown(st.session_state.script_output)
 
-    # Title overlays
     if st.session_state.title_suggestions:
         st.subheader("Title Text Overlay Suggestions")
         for i, title in enumerate(st.session_state.title_suggestions, 1):
             st.write(f"**{i}.** {title}")
 
-    # Voiceover
     if st.session_state.voiceover:
         st.subheader("AI Voiceover")
         st.audio(st.session_state.voiceover, format="audio/mp3")
         st.download_button("Download Voiceover (MP3)", st.session_state.voiceover,
                            file_name="voiceover.mp3", mime="audio/mp3")
 
-    # Scene Images
     if st.session_state.scene_images:
         st.subheader("Scene Images")
         cols = st.columns(3)
@@ -295,7 +317,6 @@ if st.session_state.script_output:
                     st.image(img_bytes, caption=f"Scene {idx+1}", use_container_width=True)
                     st.download_button(f"Download Scene {idx+1}", img_bytes, f"scene_{idx+1}.png", "image/png", key=f"s{idx}")
 
-    # Thumbnails
     if st.session_state.thumbnails:
         st.subheader(f"Thumbnails ({selected_thumb_style})")
         cols = st.columns(2)
