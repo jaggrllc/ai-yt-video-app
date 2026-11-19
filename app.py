@@ -5,7 +5,7 @@ import base64
 
 st.set_page_config(page_title="YouTube Explainer & Shorts Maker", layout="wide")
 st.title("🎬 YouTube Explainer & Shorts Maker")
-st.caption("Raw spoken scripts + voiceover + assets (GTA VI research mode)")
+st.caption("Raw spoken scripts + professional voice styles + assets")
 
 # Sidebar keys
 with st.sidebar:
@@ -63,15 +63,27 @@ thumbnail_styles = [
 ]
 selected_thumb_style = st.selectbox("Choose thumbnail style", thumbnail_styles)
 
-# Voice options
-st.subheader("Voiceover")
-voice_option = st.radio("Voice type", ["AI Male", "AI Female", "Upload my own voice"], horizontal=True)
+# Voice options (with cedar added)
+st.subheader("Voiceover Style")
+voice_option = st.radio(
+    "Voice type",
+    [
+        "Classic Trailer (deep cinematic)",
+        "News Creator (clear authoritative)",
+        "Deep Professional VO",
+        "AI Male",
+        "AI Female",
+        "Upload my own voice"
+    ],
+    horizontal=True
+)
 
 ai_male_voices = {
     "onyx": "Deep & authoritative",
     "echo": "Clear & steady",
     "fable": "Warm storyteller",
-    "ash": "Energetic"
+    "ash": "Energetic",
+    "cedar": "Rich & grounded"
 }
 ai_female_voices = {
     "nova": "Bright & energetic",
@@ -81,7 +93,21 @@ ai_female_voices = {
 }
 
 selected_voice = None
-if voice_option == "AI Male":
+voice_style_note = ""
+
+if voice_option == "Classic Trailer (deep cinematic)":
+    selected_voice = "onyx"
+    voice_style_note = "Write with dramatic pacing, strategic pauses (use ellipses or short sentences), strong emphasis, and trailer-like gravitas."
+    st.info("Classic Trailer style active — deep voice + cinematic pacing.")
+elif voice_option == "News Creator (clear authoritative)":
+    selected_voice = "echo"
+    voice_style_note = "Write with clear, steady, professional news-anchor delivery. Short, crisp sentences. Confident and easy to follow."
+    st.info("News Creator style active — clear, authoritative delivery.")
+elif voice_option == "Deep Professional VO":
+    selected_voice = "onyx"
+    voice_style_note = "Write with rich, measured, professional narrator pacing."
+    st.info("Deep Professional VO style active.")
+elif voice_option == "AI Male":
     selected_voice = st.selectbox("Choose male voice", list(ai_male_voices.keys()),
                                    format_func=lambda x: f"{x} – {ai_male_voices[x]}")
 elif voice_option == "AI Female":
@@ -108,7 +134,6 @@ def generate_script(client):
     research = ""
     if serpapi_key:
         try:
-            # Targeted research on GTA VI high-volume & breakout terms
             search_queries = [
                 "Grand Theft Auto VI release date",
                 "GTA 6 map size",
@@ -131,17 +156,17 @@ def generate_script(client):
             research = "Research skipped."
 
     word_count = int(duration * 2.5)
-
     key_points_section = f"\nMust naturally cover these points:\n{key_points}\n" if key_points.strip() else ""
 
     prompt = f"""
 You are writing a raw spoken YouTube script that will be read out loud by an AI voice.
-The topic is secretly about the upcoming big open-world crime game (the one everyone is waiting for), but you must NEVER say the words "GTA", "Grand Theft Auto", "GTA 6", "GTA VI", or any direct title.
+The topic is secretly about the upcoming big open-world crime game, but you must NEVER say the words "GTA", "Grand Theft Auto", "GTA 6", "GTA VI", or any direct title.
 
-Style: Casual conversation with a close confident homie. Speak as if you're catching up with a friend who already knows what you're talking about. Use subtle hints only.
-
+Style: Casual conversation with a close confident homie, with subtle hints only.
 Target length: about {word_count} words ({duration} seconds).
 Tone: {tone}
+
+Voice delivery style: {voice_style_note}
 
 Research data (use the facts, never name the game):
 {research}
@@ -149,10 +174,10 @@ Research data (use the facts, never name the game):
 {key_points_section}
 
 Rules:
-- Output ONLY the pure spoken script. No titles, no scene directions, no timestamps, no "hook:", no director notes.
+- Output ONLY the pure spoken script. No titles, no scene directions, no timestamps, no director notes.
 - Never mention the game name or abbreviation.
 - Make it sound natural when spoken.
-- Base the content on the strongest current search topics from the research.
+- Follow the voice delivery style above for pacing and emphasis.
 - Keep it evergreen and well-written.
 """
 
@@ -170,7 +195,7 @@ def generate_title_overlays(client):
             "role": "user",
             "content": f"""Create 6 short, punchy title text overlays (3–7 words) for a YouTube thumbnail.
 Do NOT use the words GTA or Grand Theft Auto.
-Make them curiosity-driven and related to the upcoming big open-world game.
+Make them curiosity-driven.
 Return as a numbered list only.
 
 Topic angle: {topic}
@@ -259,7 +284,7 @@ with col_btn2:
                 st.session_state.script_output = generate_script(client)
                 st.session_state.title_suggestions = generate_title_overlays(client)
 
-                if voice_option in ["AI Male", "AI Female"] and selected_voice:
+                if selected_voice:
                     plain = st.session_state.script_output
                     try:
                         speech = client.audio.speech.create(
