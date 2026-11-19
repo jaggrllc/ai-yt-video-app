@@ -2,13 +2,10 @@ import streamlit as st
 from openai import OpenAI
 from serpapi import GoogleSearch
 import base64
-import io
-from pydub import AudioSegment
-from pydub.effects import normalize, compress_dynamic_range
 
 st.set_page_config(page_title="YouTube Explainer & Shorts Maker", layout="wide")
 st.title("🎬 YouTube Explainer & Shorts Maker")
-st.caption("Raw spoken scripts + cleaned professional voiceover + assets")
+st.caption("Raw spoken scripts + professional voiceover + assets")
 
 # Sidebar keys
 with st.sidebar:
@@ -132,20 +129,6 @@ if "thumbnails" not in st.session_state:
     st.session_state.thumbnails = []
 if "voiceover" not in st.session_state:
     st.session_state.voiceover = None
-
-def clean_audio(audio_bytes):
-    """Normalize volume and reduce low-end noise / gargling."""
-    try:
-        audio = AudioSegment.from_file(io.BytesIO(audio_bytes), format="mp3")
-        audio = audio.high_pass_filter(80)                          # remove rumble
-        audio = compress_dynamic_range(audio, threshold=-20.0, ratio=3.0, attack=5.0, release=50.0)
-        audio = normalize(audio)                                    # even out volume
-        buffer = io.BytesIO()
-        audio.export(buffer, format="mp3", bitrate="192k")
-        buffer.seek(0)
-        return buffer.read()
-    except Exception:
-        return audio_bytes  # fallback to original if processing fails
 
 def generate_script(client):
     research = ""
@@ -309,8 +292,7 @@ with col_btn2:
                             voice=selected_voice,
                             input=plain[:4000]
                         )
-                        # Clean the audio
-                        st.session_state.voiceover = clean_audio(speech.content)
+                        st.session_state.voiceover = speech.content
                     except Exception as e:
                         st.session_state.voiceover = None
                         st.error(f"Voiceover error: {e}")
@@ -332,7 +314,7 @@ if st.session_state.script_output:
             st.write(f"**{i}.** {title}")
 
     if st.session_state.voiceover:
-        st.subheader("AI Voiceover (cleaned & normalized)")
+        st.subheader("AI Voiceover")
         st.audio(st.session_state.voiceover, format="audio/mp3")
         st.download_button("Download Voiceover (MP3)", st.session_state.voiceover,
                            file_name="voiceover.mp3", mime="audio/mp3")
