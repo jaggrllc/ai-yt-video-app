@@ -1,18 +1,20 @@
 import streamlit as st
 from openai import OpenAI
 from serpapi import GoogleSearch
+from elevenlabs.client import ElevenLabs
 import base64
 
 st.set_page_config(page_title="YouTube Explainer & Shorts Maker", layout="wide")
 st.title("🎬 YouTube Explainer & Shorts Maker")
-st.caption("Raw spoken scripts in refined Vice City homie voice + voiceover + assets + banners")
+st.caption("Raw spoken scripts in refined Vice City homie voice + ElevenLabs voiceover + assets + banners")
 
 # Sidebar keys
 with st.sidebar:
     st.header("API Keys")
     openai_key = st.text_input("OpenAI API Key", type="password")
     serpapi_key = st.text_input("SerpAPI Key", type="password")
-    st.markdown("[Get OpenAI key](https://platform.openai.com/api-keys) · [Get SerpAPI key](https://serpapi.com)")
+    elevenlabs_key = st.text_input("ElevenLabs API Key", type="password")
+    st.markdown("[Get OpenAI key](https://platform.openai.com/api-keys) · [Get SerpAPI key](https://serpapi.com) · [Get ElevenLabs key](https://elevenlabs.io)")
 
 # Main controls
 col1, col2, col3 = st.columns(3)
@@ -124,57 +126,33 @@ if "banner" in st.session_state and st.session_state.banner:
         mime="image/png"
     )
 
-# Voice options
-st.subheader("Voiceover Style")
+# ========== ElevenLabs Voice Options ==========
+st.subheader("ElevenLabs Voiceover")
 voice_option = st.radio(
     "Voice type",
-    [
-        "Classic Trailer (deep cinematic)",
-        "News Creator (clear authoritative)",
-        "Deep Professional VO",
-        "AI Male",
-        "AI Female",
-        "Upload my own voice"
-    ],
+    ["ElevenLabs Male", "ElevenLabs Female", "Upload my own voice"],
     horizontal=True
 )
 
-ai_male_voices = {
-    "onyx": "Deep & authoritative",
-    "echo": "Clear & steady",
-    "fable": "Warm storyteller",
-    "ash": "Energetic",
-    "cedar": "Rich & grounded"
-}
-ai_female_voices = {
-    "nova": "Bright & energetic",
-    "shimmer": "Soft & gentle",
-    "coral": "Warm & friendly",
-    "sage": "Calm & professional"
-}
-
-selected_voice = None
-voice_style_note = ""
-
-if voice_option == "Classic Trailer (deep cinematic)":
-    selected_voice = "onyx"
-    voice_style_note = "Write with dramatic pacing, strategic pauses, strong emphasis, and trailer-like gravitas."
-elif voice_option == "News Creator (clear authoritative)":
-    selected_voice = "echo"
-    voice_style_note = "Write with clear, steady, professional news-anchor delivery."
-elif voice_option == "Deep Professional VO":
-    selected_voice = "onyx"
-    voice_style_note = "Write with rich, measured, professional narrator pacing."
-elif voice_option == "AI Male":
-    selected_voice = st.selectbox("Choose male voice", list(ai_male_voices.keys()),
-                                   format_func=lambda x: f"{x} – {ai_male_voices[x]}")
-elif voice_option == "AI Female":
-    selected_voice = st.selectbox("Choose female voice", list(ai_female_voices.keys()),
-                                   format_func=lambda x: f"{x} – {ai_female_voices[x]}")
+elevenlabs_voice_id = None
+if voice_option == "ElevenLabs Male":
+    elevenlabs_voice_id = st.text_input(
+        "Enter ElevenLabs Male Voice ID",
+        placeholder="e.g. pNInz6obpgDQGcFmaJgB",
+        help="Paste the Voice ID from your ElevenLabs account"
+    )
+elif voice_option == "ElevenLabs Female":
+    elevenlabs_voice_id = st.text_input(
+        "Enter ElevenLabs Female Voice ID",
+        placeholder="e.g. 21m00Tcm4TlvDq8ikWAM",
+        help="Paste the Voice ID from your ElevenLabs account"
+    )
 else:
     uploaded_voice = st.file_uploader("Upload your voice recording (mp3/wav)", type=["mp3", "wav", "m4a"])
     if uploaded_voice:
         st.audio(uploaded_voice)
+
+voice_style_note = "Speak in a natural, clear, and engaging style suitable for YouTube."
 
 # Session state
 if "script_output" not in st.session_state:
@@ -330,6 +308,20 @@ Angle: {topic}"""
             thumbs.append(None)
     return thumbs
 
+def generate_elevenlabs_voiceover(text, voice_id, api_key):
+    try:
+        client = ElevenLabs(api_key=api_key)
+        audio = client.text_to_speech.convert(
+            text=text[:4000],
+            voice_id=voice_id,
+            model_id="eleven_multilingual_v2",
+            output_format="mp3_44100_128"
+        )
+        return b"".join(audio)
+    except Exception as e:
+        st.error(f"ElevenLabs error: {e}")
+        return None
+
 # Buttons
 col_btn1, col_btn2 = st.columns(2)
 with col_btn1:
@@ -352,18 +344,12 @@ with col_btn2:
                 st.session_state.script_output = generate_script(client)
                 st.session_state.title_suggestions = generate_title_overlays(client)
 
-                if selected_voice:
+                # ElevenLabs voiceover
+                if elevenlabs_voice_id and elevenlabs_key:
                     plain = st.session_state.script_output
-                    try:
-                        speech = client.audio.speech.create(
-                            model="tts-1",
-                            voice=selected_voice,
-                            input=plain[:4000]
-                        )
-                        st.session_state.voiceover = speech.content
-                    except Exception as e:
-                        st.session_state.voiceover = None
-                        st.error(f"Voiceover error: {e}")
+                    st.session_state.voiceover = generate_elevenlabs_voiceover(
+                        plain, elevenlabs_voice_id, elevenlabs_key
+                    )
 
                 st.session_state.scene_images = generate_scene_images(client)
                 st.session_state.thumbnails = generate_thumbnails(client)
@@ -382,7 +368,7 @@ if st.session_state.script_output:
             st.write(f"**{i}.** {title}")
 
     if st.session_state.voiceover:
-        st.subheader("AI Voiceover")
+        st.subheader("ElevenLabs Voiceover")
         st.audio(st.session_state.voiceover, format="audio/mp3")
         st.download_button("Download Voiceover (MP3)", st.session_state.voiceover,
                            file_name="voiceover.mp3", mime="audio/mp3")
