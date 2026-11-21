@@ -9,88 +9,111 @@ st.set_page_config(page_title="YouTube Explainer & Shorts Maker", layout="wide")
 st.title("🎬 YouTube Explainer & Shorts Maker")
 st.caption("Vice Grift AI style scripts + free Google TTS + safe original branding")
 
-# Sidebar
-with st.sidebar:
-    st.header("API Keys")
-    openai_key = st.text_input("OpenAI API Key", type="password")
-    serpapi_key = st.text_input("SerpAPI Key", type="password")
-    st.caption("Voiceover uses free Google TTS")
+# ---------- Secrets + Sidebar fallback ----------
+def get_secret(key: str, label: str):
+    """Prefer st.secrets, fall back to sidebar input."""
+    if key in st.secrets:
+        return st.secrets[key]
+    return st.sidebar.text_input(label, type="password")
 
-# Main inputs
-col1, col2, col3 = st.columns(3)
-with col1:
-    topic = st.text_input("Video topic / angle")
-    brand_name = st.text_input("Brand name", value="Vice Grift AI")
-with col2:
-    video_type = st.selectbox("Length type", ["Short (15–60 sec)", "Explainer"])
-with col3:
-    duration = st.slider("Target duration (seconds)", 15, 60, 45) if video_type == "Short (15–60 sec)" else st.slider("Target duration (seconds)", 60, 300, 90)
-    tone = st.selectbox("Tone", ["Casual homie conversation", "Energetic", "Confident & chill", "Hype but natural"])
+openai_key = get_secret("OPENAI_API_KEY", "OpenAI API Key")
+serpapi_key = get_secret("SERPAPI_KEY", "SerpAPI Key")
 
-st.subheader("Vice Grift Blurb")
-homie_blurb = st.text_area("Primary source material", height=140)
+st.sidebar.caption("Voiceover uses free Google TTS (no key needed)")
+st.sidebar.markdown("---")
+st.sidebar.info("Tip: Use `.streamlit/secrets.toml` for production.")
 
-st.subheader("Additional Key Points (optional)")
-key_points = st.text_area("Extra points", height=90)
+# ---------- Cached OpenAI client ----------
+@st.cache_resource
+def get_openai_client(api_key: str):
+    return OpenAI(api_key=api_key)
 
-aspect_ratio = st.radio("Video format", ["9:16 (Shorts)", "16:9 (Explainer)"], horizontal=True)
-is_vertical = "9:16" in aspect_ratio
-image_size = "1024x1792" if is_vertical else "1792x1024"
-format_note = "vertical" if is_vertical else "horizontal"
+# ---------- Session state ----------
+defaults = {
+    "script_output": "",
+    "title_suggestions": [],
+    "scene_images": [],
+    "thumbnails": [],
+    "voiceover": None,
+    "banner": None,
+}
+for k, v in defaults.items():
+    st.session_state.setdefault(k, v)
 
-selected_thumb_style = st.selectbox("Thumbnail style", [
-    "Bold & Dramatic", "Minimalist & Clean", "Colorful & Energetic",
-    "Professional", "Curiosity-driven", "Fun & Playful", "Urban Cinematic Action"
-])
+# ---------- Main form ----------
+with st.form("main_form"):
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        topic = st.text_input("Video topic / angle")
+        brand_name = st.text_input("Brand name", value="Vice Grift AI")
+    with col2:
+        video_type = st.selectbox("Length type", ["Short (15–60 sec)", "Explainer"])
+    with col3:
+        if video_type == "Short (15–60 sec)":
+            duration = st.slider("Target duration (seconds)", 15, 60, 45)
+        else:
+            duration = st.slider(
+                "Target duration (seconds)",
+                60, 3600, 300,
+                help="Up to 60 minutes for full explainers"
+            )
+        tone = st.selectbox("Tone", ["Casual homie conversation", "Energetic", "Confident & chill", "Hype but natural"])
 
-banner_style = st.selectbox("Banner style (auto-generated)", [
-    "Urban Cinematic Night", "Bold & High Contrast", "Minimalist Dark",
-    "Neon Cyberpunk City", "Luxury & Wealth", "Street Hustle Energy"
-])
+    homie_blurb = st.text_area("Vice Grift Blurb (primary source)", height=140)
+    key_points = st.text_area("Additional Key Points (optional)", height=90)
 
-voice_option = st.radio("Voice", ["Google TTS (UK – deeper)", "Google TTS (AU – clearer)", "Upload own voice"], horizontal=True)
-gtts_tld = "co.uk" if "UK" in voice_option else "com.au" if "AU" in voice_option else "com"
+    aspect_ratio = st.radio("Video format", ["9:16 (Shorts)", "16:9 (Explainer)"], horizontal=True)
+    selected_thumb_style = st.selectbox("Thumbnail style", [
+        "Bold & Dramatic", "Minimalist & Clean", "Colorful & Energetic",
+        "Professional", "Curiosity-driven", "Fun & Playful", "Urban Cinematic Action"
+    ])
+    banner_style = st.selectbox("Banner style", [
+        "Urban Cinematic Night", "Bold & High Contrast", "Minimalist Dark",
+        "Neon Cyberpunk City", "Luxury & Wealth", "Street Hustle Energy"
+    ])
+    voice_option = st.radio(
+        "Voice",
+        ["Google TTS (UK – deeper)", "Google TTS (AU – clearer)", "Upload own voice"],
+        horizontal=True
+    )
 
-if "Upload" in voice_option:
+    submitted = st.form_submit_button("🚀 Generate ALL Assets", type="primary")
+    script_only = st.form_submit_button("✨ Generate Script Only")
+
+# ---------- Voice upload (outside form) ----------
+if voice_option == "Upload own voice":
     uploaded = st.file_uploader("Upload voice", type=["mp3", "wav"])
     if uploaded:
         st.audio(uploaded)
 
-# Session state
-for k in ["script_output", "title_suggestions", "scene_images", "thumbnails", "voiceover", "banner"]:
-    if k not in st.session_state:
-        st.session_state[k] = "" if k == "script_output" else ([] if "images" in k or "thumb" in k or "suggest" in k else None)
+gtts_tld = "co.uk" if "UK" in voice_option else "com.au" if "AU" in voice_option else "com"
+is_vertical = "9:16" in aspect_ratio
+image_size = "1024x1792" if is_vertical else "1792x1024"
+format_note = "vertical" if is_vertical else "horizontal"
 
 ALLOWED_PHRASES = [
-    "Vice Grift AI",
-    "Vice Grift AI Channel",
-    "Vice Grifting",
-    "Vice Grift",
-    "Vice Grifter",
-    "Vice Grifters",
-    "The Vice Grifting Nation",
-    "Let's go, Vice Grifters!",
-    "Yo, Vice Grifters!"
+    "Vice Grift AI", "Vice Grift AI Channel", "Vice Grifting", "Vice Grift",
+    "Vice Grifter", "Vice Grifters", "The Vice Grifting Nation",
+    "Let's go, Vice Grifters!", "Yo, Vice Grifters!"
 ]
-
 FORBIDDEN = """
 GTA, GTA 6, GTA VI, Grand Theft Auto, Grand Theft Auto VI, Grand Theft Auto 6,
-Vice City, Leonida, Rockstar, Rockstar Games, Take-Two, Take Two, 
-Lucia, Jason, any Rockstar character names, any Rockstar location names,
-any trademarked game titles or company names.
+Vice City, Leonida, Rockstar, Rockstar Games, Take-Two, Take Two,
+Lucia, Jason, any Rockstar character or location names, any trademarked game titles.
 """
 
+# ---------- Generation functions ----------
 def generate_script(client):
     research = ""
     if serpapi_key:
         try:
-            queries = [topic or "open world hustle game", "street level scams open world", "heist open world reviews"]
+            queries = [topic or "open world hustle", "street level scams", "heist open world"]
             for q in queries[:3]:
                 res = GoogleSearch({"q": q, "api_key": serpapi_key, "num": 3}).get_dict()
                 research += f"\n{q}:\n"
                 for r in res.get("organic_results", [])[:2]:
                     research += f"- {r.get('snippet', '')}\n"
-        except:
+        except Exception:
             pass
 
     prompt = f"""
@@ -122,25 +145,23 @@ Output ONLY the spoken script.
 def generate_title_overlays(client):
     resp = client.chat.completions.create(
         model="gpt-4o-mini",
-        messages=[{"role": "user", "content": f"6 short punchy title overlays using original hustle language. Numbered list only.\n{topic}\n{homie_blurb[:300]}"}]
+        messages=[{"role": "user", "content": f"6 short punchy title overlays. Numbered list only.\n{topic}\n{homie_blurb[:300]}"}]
     )
     return [l.strip() for l in resp.choices[0].message.content.split("\n") if l.strip() and any(c.isdigit() for c in l[:3])][:6]
 
 def safe_image_prompt(base: str) -> str:
     allowed = ", ".join(ALLOWED_PHRASES)
     return f"""{base}
-
-STRICT RULES FOR TEXT IN THE IMAGE:
-- You may ONLY use text from this exact list (use one phrase once if text is needed): {allowed}
-- Do NOT use any of the following words or anything similar: {FORBIDDEN}
-- Focus on original urban hustle / heist / street-level scam energy.
-- High quality, cinematic, dramatic lighting.
+STRICT RULES FOR TEXT:
+- You may ONLY use text from this list (use one phrase once if needed): {allowed}
+- Do NOT use: {FORBIDDEN}
+- Focus on original urban hustle / heist energy. High quality, cinematic.
 """
 
 def generate_scene_images(client):
     resp = client.chat.completions.create(
         model="gpt-4o-mini",
-        messages=[{"role": "user", "content": f"3 short original image prompts about hustles and street energy. Numbered list.\n{st.session_state.script_output[:1500]}"}]
+        messages=[{"role": "user", "content": f"3 short original image prompts. Numbered.\n{st.session_state.script_output[:1500]}"}]
     )
     prompts = [l.strip() for l in resp.choices[0].message.content.split("\n") if l.strip() and any(c.isdigit() for c in l[:3])][:3]
     images = []
@@ -149,18 +170,17 @@ def generate_scene_images(client):
             img = client.images.generate(
                 model="gpt-image-2.5-flare",
                 prompt=safe_image_prompt(f"Cinematic urban hustle scene, {format_note}: {p}"),
-                size=image_size,
-                n=1
+                size=image_size, n=1
             )
             images.append(base64.b64decode(img.data[0].b64_json))
-        except:
+        except Exception:
             images.append(None)
     return images
 
 def generate_thumbnails(client):
     resp = client.chat.completions.create(
         model="gpt-4o-mini",
-        messages=[{"role": "user", "content": f'2 original thumbnail prompts in style "{selected_thumb_style}". Numbered.'}]
+        messages=[{"role": "user", "content": f'2 thumbnail prompts in style "{selected_thumb_style}". Numbered.'}]
     )
     prompts = [l.strip() for l in resp.choices[0].message.content.split("\n") if l.strip() and any(c.isdigit() for c in l[:3])][:2]
     thumbs = []
@@ -169,20 +189,18 @@ def generate_thumbnails(client):
             img = client.images.generate(
                 model="gpt-image-2.5-flare",
                 prompt=safe_image_prompt(f"YouTube thumbnail, {selected_thumb_style}, bold, {format_note}: {p}"),
-                size=image_size,
-                n=1
+                size=image_size, n=1
             )
             thumbs.append(base64.b64decode(img.data[0].b64_json))
-        except:
+        except Exception:
             thumbs.append(None)
     return thumbs
 
 def generate_banner(client):
     prompt = safe_image_prompt(f"""
-Wide cinematic banner for channel header.
-Style: {banner_style}.
-Urban hustle and street energy, dramatic lighting, high quality.
-Use one of the allowed brand phrases exactly once in bold stylish text.
+Wide cinematic banner. Style: {banner_style}.
+Urban hustle energy, dramatic lighting.
+Use one allowed brand phrase exactly once in bold text.
 """)
     try:
         img = client.images.generate(model="gpt-image-2.5-flare", prompt=prompt, size="1792x1024", n=1)
@@ -202,31 +220,24 @@ def generate_google_tts(text, tld="com"):
         st.error(f"TTS error: {e}")
         return None
 
-# Buttons
-c1, c2 = st.columns(2)
-with c1:
-    if st.button("✨ Generate Script Only"):
-        if openai_key and (topic or homie_blurb):
-            client = OpenAI(api_key=openai_key)
-            with st.spinner("Writing script..."):
-                st.session_state.script_output = generate_script(client)
-            st.rerun()
-
-with c2:
-    if st.button("🚀 Generate ALL Assets", type="primary"):
-        if openai_key and (topic or homie_blurb):
-            client = OpenAI(api_key=openai_key)
-            with st.spinner("Generating everything..."):
-                st.session_state.script_output = generate_script(client)
+# ---------- Run generation ----------
+if submitted or script_only:
+    if not openai_key or not (topic or homie_blurb):
+        st.warning("OpenAI key + topic or blurb required.")
+    else:
+        client = get_openai_client(openai_key)
+        with st.spinner("Generating..."):
+            st.session_state.script_output = generate_script(client)
+            if submitted:
                 st.session_state.title_suggestions = generate_title_overlays(client)
                 if "Upload" not in voice_option:
                     st.session_state.voiceover = generate_google_tts(st.session_state.script_output, gtts_tld)
                 st.session_state.scene_images = generate_scene_images(client)
                 st.session_state.thumbnails = generate_thumbnails(client)
                 st.session_state.banner = generate_banner(client)
-            st.rerun()
+        st.rerun()
 
-# Display
+# ---------- Display ----------
 if st.session_state.script_output:
     st.success("Assets ready")
     st.text_area("Script", st.session_state.script_output, height=260)
